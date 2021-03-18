@@ -1,0 +1,42 @@
+- name: Init deploy
+  hosts: localhost
+  become: yes
+  become_user: root
+  connection: local # 不需要通过ssh连接
+  tasks:
+    - name: Get systime
+      setup:
+        filter: ansible_date_time
+    - name:
+      set_fact:
+        time_start: "{{ ansible_date_time.epoch }}"
+    - debug: var=ansible_date_time.date
+    - debug: var=ansible_date_time.time
+
+- name: Exchange Keys
+  hosts: kubeaction
+  gather_facts: no
+  tags: ssh
+  roles:
+    - { role: common }
+  tasks:
+    - name: SSH KeyGen command
+      shell: >
+        ssh-keygen -q -b 2048 -t rsa -N "" -C "creating SSH" -f ~/.ssh/id_rsa
+        creates="~/.ssh/id_rsa"
+    - name: Fetch the keyfile from the node to master
+      fetch:
+        src: "~/.ssh/id_rsa.pub"
+        dest: "buffer/{{ipv4_address}}-id_rsa.pub"
+        flat: yes
+    - name: Configure ssh key
+      authorized_key:
+        user: root
+        state: present
+        key: "{{ lookup('file','buffer/{{item}}-id_rsa.pub')}}"
+      with_items:
+        - "{{ groups['kubeaction'] }}"
+    - name: Complete non-confidential login to each host
+      copy:
+        src: "~/.ssh/known_hosts"
+        dest: "~/.ssh/known_hosts"
