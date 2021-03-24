@@ -1,0 +1,31 @@
+- name: prepare HA environment
+  yum:
+    name: "{{ item }}"
+    state: absent
+  loop:
+    - keepalived
+    - haproxy
+  ignore_errors: yes
+
+- name: install keepalived and haproxy
+  yum:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - keepalived
+    - haproxy
+  ignore_errors: yes
+
+- name: Copy HA config
+  become: yes
+  template: src={{ item.file }} dest={{ item.conf }}
+  with_items:
+  - { file: 'keepalived.conf',conf: '/etc/keepalived/keepalived.conf' }
+  - { file: 'check_haproxy.sh',conf: '/etc/keepalived/check_haproxy.sh' }
+  - { file: 'haproxy.cfg',conf: '/etc/haproxy/haproxy.cfg' }
+
+- name: Set IP
+  lineinfile: dest=/etc/keepalived/keepalived.conf regexp={{ item.regexp }} line={{ item.line}}
+  with_items:
+    - { regexp: "10.16.200.70", line: "{{ ipv4_vip }}"}
+    - { regexp: "interface bond0", line: "interface {{ ipv4_interface }}"}

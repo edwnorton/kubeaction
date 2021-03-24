@@ -8,6 +8,7 @@
     ipv4_address: "{{hostvars[inventory_hostname]['ansible_env'] .SSH_CONNECTION.split(' ')[2]}}"
     ipv4_interface: "{% if 'interface' in ansible_default_ipv4 %}{{ansible_default_ipv4.interface}}{% elif 'ansible_'~default_interface in vars %}{{default_interface}}{%else%}{{ansible_interfaces.0}}{%endif%}"
     ipv4_hostname: "{{hostvars[inventory_hostname]['ansible_hostname']}}"
+    ipv4_vip: "172.16.13.200"
 
 - name: Set flag after checked
   set_fact:
