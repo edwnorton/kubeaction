@@ -4,6 +4,7 @@
     state: absent
   loop:
     - docker-ce
+  ignore_errors: yes
 
 - name: install docker-ce
   yum:
@@ -15,6 +16,11 @@
     - containerd.io
   ignore_errors: yes
 
+- name: make docker dir
+  file:
+    path: /etc/docker
+    state: directory
+    mode: 0755
 
 - name: Copy daemon.json to /etc/docker/daemon.json
   become: yes

@@ -47,3 +47,16 @@
           - "Setting HA config (include HA-config.yml)"
           - "*****************************************************************"
 - include: set-HA-config.yaml
+
+
+- name: Install kubeaction
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  tasks:
+    - debug:
+        msg:
+          - "*****************************************************************"
+          - "Install kubeaction(include set-kubeaction.yml)"
+          - "*****************************************************************"
+- include: set-kubeaction.yaml

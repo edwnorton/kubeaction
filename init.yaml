@@ -240,6 +240,18 @@
         - soft
       ignore_errors: yes
 
+- name: add kubernetes repo
+  hosts: kubeaction
+  gather_facts: no
+  become: yes
+  become_user: root
+  tags: k8s
+  tasks:
+    - name: add kubernetes repo
+      template: src={{ item.file }} dest={{ item.conf }}
+      with_items:
+      - { file: '/root/kubeaction/roles/kubernetes/templates/kubernetes.repo',conf: '/etc/yum.repos.d/kubernetes.repo' }
+
 - name: Clean temporary files produced by ansible
   hosts: localhost
   gather_facts: no

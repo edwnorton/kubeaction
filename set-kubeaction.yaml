@@ -1,0 +1,92 @@
+- name: Install kubelet kubeadm kubectl
+  hosts: "{{ hosts | default('kubeaction') }}"
+  gather_facts: no
+  tags: k8s
+  roles:
+    - { role: common }
+    - { role: kubernetes }
+
+
+- name: Initialize the control node
+  hosts: "{{ hosts | default('master[0]') }}"
+  tags: k8s
+  gather_facts: no
+  ignore_errors: yes
+  roles:
+    - role: common
+  tasks:
+    - name: Creating a working directory
+      file:
+        dest: /opt/kube
+        state: directory
+    - name: initializing cluster config
+      template:
+         src: roles/common/templates/kubeadm-config.yaml
+         dest: /opt/kube
+         force: yes
+    - name: Start the cluster
+      raw: kubeadm init --config=/opt/kube/kubeadm-config.yaml | tee /opt/kube/kubeadm-init.log
+
+- name: Start Kubelet and set up boot
+  hosts: "{{ hosts | default('kubeaction') }}"
+  tags: k8s
+  gather_facts: no
+  tasks:
+    - name: Start Kubelet and set up boot
+      systemd:
+        name: kubelet
+        state: started
+        enabled: yes
+
+- name: Configure and use Kubectl
+  hosts: "{{ hosts | default('master') }}"
+  gather_facts: no
+  become: yes
+  become_user: root
+  any_errors_fatal: true
+  tags: kubeinit
+  tasks:
+    - name: Create $HOME/.kube
+      file:
+        path: $HOME/.kube
+        state: directory
+    - name: Copy master1 admin.conf
+      copy:
+        src: /etc/kubernetes/admin.conf
+        dest: $HOME/.kube/config
+    - name: To start using your cluster, you need to run the following as a regular user
+      shell: chown $(id -u):$(id -g) $HOME/.kube/config
+      ignore_errors: yes
+
+- name: calico images
+  hosts: "{{ hosts | default('kubeaction') }}"
+  gather_facts: no
+  become: yes
+  tags: calico_image
+  tasks:
+    - name: pull calico images
+      shell: |
+            docker pull docker.io/calico/cni:v3.18.1
+            docker pull docker.io/calico/pod2daemon-flexvol:v3.18.1
+            docker pull docker.io/calico/node:v3.18.1
+            docker pull docker.io/calico/kube-controllers:v3.18.1
+      ignore_errors: yes
+
+- name: Get CNI Calico running
+  hosts: "{{ hosts | default('master[0]') }}"
+  gather_facts: no
+  become: yes
+  become_user: root
+  any_errors_fatal: true
+  tags: calico_running
+  tasks:
+    - name: Prepare configuration file
+      template:
+         src: "{{item}}"
+         dest: /opt/kube/calico.yaml
+         force: yes
+      with_items:
+         - roles/common/templates/calico.yaml
+    - name: Start the race network
+      raw: kubectl apply -f /opt/kube/calico.yaml
+      #ignore_errors: yes
