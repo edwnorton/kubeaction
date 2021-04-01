@@ -7,6 +7,18 @@
     - { role: kubernetes }
 
 
+- name: working directory
+  hosts: "{{ hosts | default('kubeaction') }}"
+  gather_facts: no
+  tags: work-dir
+  tasks:
+    - name: generate working directory
+      file:
+        dest: "{{item.dest}}"
+        state: directory
+      with_items:
+        - {dest: "/opt/kube"}
+
 - name: Initialize the control node
   hosts: "{{ hosts | default('master[0]') }}"
   tags: k8s
@@ -25,7 +37,7 @@
          dest: /opt/kube
          force: yes
     - name: Start the cluster
-      raw: kubeadm init --config=/opt/kube/kubeadm-config.yaml | tee /opt/kube/kubeadm-init.log
+      raw: kubeadm init --config=/opt/kube/kubeadm-config.yaml --upload-certs | tee /opt/kube/kubeadm-init.log
 
 - name: Start Kubelet and set up boot
   hosts: "{{ hosts | default('kubeaction') }}"
@@ -58,19 +70,6 @@
       shell: chown $(id -u):$(id -g) $HOME/.kube/config
       ignore_errors: yes
 
-- name: calico images
-  hosts: "{{ hosts | default('kubeaction') }}"
-  gather_facts: no
-  become: yes
-  tags: calico_image
-  tasks:
-    - name: pull calico images
-      shell: |
-            docker pull docker.io/calico/cni:v3.18.1
-            docker pull docker.io/calico/pod2daemon-flexvol:v3.18.1
-            docker pull docker.io/calico/node:v3.18.1
-            docker pull docker.io/calico/kube-controllers:v3.18.1
-      ignore_errors: yes
 
 - name: Get CNI Calico running
   hosts: "{{ hosts | default('master[0]') }}"
@@ -89,4 +88,92 @@
          - roles/common/templates/calico.yaml
     - name: Start the race network
       raw: kubectl apply -f /opt/kube/calico.yaml
-      #ignore_errors: yes
+      ignore_errors: yes
+
+- name: Master config 
+  hosts: "{{ hosts | default('master[0]') }}"
+  gather_facts: no
+  become: yes
+  become_user: root
+  any_errors_fatal: true
+  tags: join_master_config
+  tasks:
+    - name: Take the configuration file
+      shell: |
+             cat /opt/kube/kubeadm-init.log |awk '/control-plane node/,/Please note that/{if(i>1)print x;x=$0;i++}' > /opt/kube/join-master.sh
+             cat /opt/kube/kubeadm-init.log |tail -2 > /opt/kube/join-node.sh
+      ignore_errors: yes
+
+
+
+- name: Add other master config
+  hosts: "{{ hosts | default('master:node') }}"
+  gather_facts: no
+  become: yes
+  become_user: root
+  any_errors_fatal: true
+  tags: join
+  tasks:
+    - name: Add the other master config
+      copy:
+        src: "{{item}}"
+        dest: /opt/kube
+      with_items:
+         - /opt/kube/join-master.sh
+         - /opt/kube/join-node.sh
+
+
+- name: Add other master
+  hosts: "{{ hosts | default('master[1:2]') }}"
+  gather_facts: no
+  become: yes
+  become_user: root
+  any_errors_fatal: true
+  tags: join_master
+  tasks:
+    - name: Add additional control nodes
+      script: /opt/kube/join-master.sh
+      ignore_errors: yes
+
+- name: taint nodes
+  hosts: "{{ hosts | default('master[0]') }}"
+  gather_facts: no
+  any_errors_fatal: true
+  tags: taint-master
+  tasks:
+    - name: taint nodes master
+      shell: kubectl taint nodes --all node-role.kubernetes.io/master-
+
+
+- name: Add other node
+  hosts: "{{ hosts | default('node') }}"
+  gather_facts: no
+  become: yes
+  become_user: root
+  any_errors_fatal: true
+  tags: join_node
+  tasks:
+    - name: Join the node
+      script: /opt/kube/join-node.sh
+      ignore_errors: yes
+
+- name: worker role
+  hosts: "{{ hosts | default('master[0]') }}"
+  gather_facts: no
+  become: yes
+  become_user: root
+  any_errors_fatal: true
+  tags: worker-role
+  tasks:
+    - name: def worker role
+      shell: kubectl label node test01.anyran.wyny node-role.kubernetes.io/worker=worker
+
+- name: kubectl completion
+  hosts: "{{ hosts | default('kubeaction') }}"
+  gather_facts: no
+  become: yes
+  any_errors_fatal: true
+  tags: kubectl-completion
+  tasks:
+    - name: kubectl completion
+      shell: echo "source <(kubectl completion bash)" >> ~/.bashrc

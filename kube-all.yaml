@@ -21,15 +21,9 @@
     - debug: var=ansible_date_time.date
     - debug: var=ansible_date_time.time
 
-- name: Install Docker
-  hosts: kubeaction
-  gather_facts: no
-  tags: docker
-  roles:
-    - { role: docker }
 
 - name: Install HA
-  hosts: "{{ hosts | default('kubeaction') }}"
+  hosts: "{{ hosts | default('master') }}"
   gather_facts: no
   tags: HA
   roles:
