@@ -15,7 +15,7 @@
 [vip]
 172.16.13.200
 
+[worknodename]
+test01.anyran.wyny
+
 [all:vars]
-master1=172.16.13.54
-master2=172.16.13.60
-master3=172.16.13.61

@@ -8,3 +8,9 @@ hosts:
   master3:
     ip: 172.16.13.61
     hostname: tqtest3
+  node1:
+    ip: 172.16.13.71
+    hostname: test01.anyran.wyny
+  nodehostname:
+    node1: ttt1
+    node2: ttt2

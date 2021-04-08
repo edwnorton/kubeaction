@@ -166,7 +166,8 @@
   tags: worker-role
   tasks:
     - name: def worker role
-      shell: kubectl label node test01.anyran.wyny node-role.kubernetes.io/worker=worker
+      shell: kubectl label node {{ item }} node-role.kubernetes.io/worker=worker
+      loop: "{{ groups['worknodename'] }}"
 
 - name: kubectl completion
   hosts: "{{ hosts | default('kubeaction') }}"
