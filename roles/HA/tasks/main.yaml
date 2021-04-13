@@ -27,5 +27,5 @@
 - name: Set IP
   lineinfile: dest=/etc/keepalived/keepalived.conf regexp={{ item.regexp }} line={{ item.line}}
   with_items:
-    - { regexp: "10.16.200.70", line: "{{ ipv4_vip }}"}
+    - { regexp: "10.16.200.70", line: "{{ hosts.master.vip }}"}
     - { regexp: "interface bond0", line: "interface {{ ipv4_interface }}"}

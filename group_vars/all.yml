@@ -11,6 +11,5 @@ hosts:
   node1:
     ip: 172.16.13.71
     hostname: test01.anyran.wyny
-  nodehostname:
-    node1: ttt1
-    node2: ttt2
+  master:
+    vip: 172.16.13.200

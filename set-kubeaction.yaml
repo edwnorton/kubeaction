@@ -168,6 +168,7 @@
     - name: def worker role
       shell: kubectl label node {{ item }} node-role.kubernetes.io/worker=worker
       loop: "{{ groups['worknodename'] }}"
+      ignore_errors: yes
 
 - name: kubectl completion
   hosts: "{{ hosts | default('kubeaction') }}"

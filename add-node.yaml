@@ -1,0 +1,117 @@
+- name: Init deploy
+  hosts: localhost
+  become: yes
+  become_user: root
+  connection: local
+  any_errors_fatal: true
+  gather_facts: no
+  tasks:
+    - debug:
+        msg:
+          - "**********************************************************************************"
+          - "====================== Start Deploying ADD Node =================================="
+          - "**********************************************************************************"
+    - name:
+      wait_for:
+        delay: 3
+        timeout: 0
+    - name: Gather system time
+      setup:
+        filter: ansible_date_time
+    - name: Set start time
+      set_fact:
+        time_start: "{{ ansible_date_time.epoch }}"
+    - debug: var=ansible_date_time.date
+    - debug: var=ansible_date_time.time
+
+- name: Init servers
+  hosts: "{{ hosts | default('add-node') }}"
+  gather_facts: true
+  tags: add-node
+  roles:
+    - { role: common }
+    - { role: add-node }
+    - { role: docker } 
+    - { role: kubernetes }
+
+- name: k8s images
+  hosts: "{{ hosts | default('add-node') }}"
+  gather_facts: no
+  become: yes
+  tags: k8s_image
+  tasks:
+    - name: pull kubeaction images
+      shell: |
+            docker pull registry.cn-hangzhou.aliyuncs.com/google_containers/kube-apiserver:v1.19.9
+            docker pull registry.cn-hangzhou.aliyuncs.com/google_containers/kube-controller-manager:v1.19.9
+            docker pull registry.cn-hangzhou.aliyuncs.com/google_containers/kube-scheduler:v1.19.9
+            docker pull registry.cn-hangzhou.aliyuncs.com/google_containers/kube-proxy:v1.19.9
+            docker pull registry.cn-hangzhou.aliyuncs.com/google_containers/pause:3.2
+            docker pull registry.cn-hangzhou.aliyuncs.com/google_containers/etcd:3.4.13-0
+            docker pull registry.cn-hangzhou.aliyuncs.com/google_containers/coredns:1.7.0
+      ignore_errors: yes
+
+- name: tag images
+  hosts: "{{ hosts | default('add-node') }}"
+  gather_facts: no
+  become: yes
+  tags: k8s_image
+  tasks:
+    - name: tag images
+      shell: |
+            docker tag registry.cn-hangzhou.aliyuncs.com/google_containers/kube-apiserver:v1.19.9 k8s.gcr.io/kube-apiserver:v1.19.9
+            docker tag registry.cn-hangzhou.aliyuncs.com/google_containers/kube-controller-manager:v1.19.9 k8s.gcr.io/kube-controller-manager:v1.19.9
+            docker tag registry.cn-hangzhou.aliyuncs.com/google_containers/kube-scheduler:v1.19.9 k8s.gcr.io/kube-scheduler:v1.19.9
+            docker tag registry.cn-hangzhou.aliyuncs.com/google_containers/kube-proxy:v1.19.9 k8s.gcr.io/kube-proxy:v1.19.9
+            docker tag registry.cn-hangzhou.aliyuncs.com/google_containers/pause:3.2 k8s.gcr.io/pause:3.2
+            docker tag registry.cn-hangzhou.aliyuncs.com/google_containers/etcd:3.4.13-0 k8s.gcr.io/etcd:3.4.13-0
+            docker tag registry.cn-hangzhou.aliyuncs.com/google_containers/coredns:1.7.0 k8s.gcr.io/coredns:1.7.0
+      ignore_errors: yes
+
+- name: calico images
+  hosts: "{{ hosts | default('add-node') }}"
+  gather_facts: no
+  become: yes
+  tags: k8s_image
+  tasks:
+    - name: pull calico images
+      shell: |
+            docker pull docker.io/calico/cni:v3.18.1
+            docker pull docker.io/calico/pod2daemon-flexvol:v3.18.1
+            docker pull docker.io/calico/node:v3.18.1
+            docker pull docker.io/calico/kube-controllers:v3.18.1
+      ignore_errors: yes
+
+- name: Start Kubelet and set up boot
+  hosts: "{{ hosts | default('add-node') }}"
+  tags: k8s
+  gather_facts: no
+  tasks:
+    - name: Start Kubelet and set up boot
+      systemd:
+        name: kubelet
+        state: started
+        enabled: yes
+    - name: Creating a working directory
+      file:
+        dest: /opt/kube
+        state: directory
+    - name: Add the join node config
+      copy:
+        src: "{{item}}"
+        dest: /opt/kube
+      with_items:
+         - /opt/kube/join-node.sh
+    - name: join the node
+      script: /opt/kube/join-node.sh
+      ignore_errors: yes
+
+- name: worker role
+  hosts: "{{ hosts | default('master[0]') }}"
+  gather_facts: no
+  tags: worker-role
+  tasks:
+    - name: def worker role
+      shell: kubectl label node {{ item }} node-role.kubernetes.io/worker=worker
+      loop: "{{ groups['worknodename'] }}"
+      ignore_errors: yes

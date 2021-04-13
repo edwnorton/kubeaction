@@ -1,0 +1,159 @@
+- name: Create the.ssh working directory
+  file:
+    dest: /root/.ssh
+    state: directory
+- name: copy all ansible know_hosts achieve non-secret login host
+  copy:
+    src: ~/.ssh/known_hosts
+    dest: ~/.ssh/known_hosts
+
+- name: Supplement the /etc/hosts of ansible nodes to the new node
+  copy:
+   src: /etc/hosts
+   dest: /etc/hosts
+
+- name: Update the /etc/hosts file with node name
+  lineinfile:
+    path: "/etc/hosts"
+    regexp: ".*\t{{ hostvars[item]['ansible_hostname']}} {{ hostvars[item]['ansible_hostname']}}"
+    line: "{{ hostvars[item]['ansible_env'].SSH_CONNECTION.split(' ')[2] }} {{ hostvars[item]['ansible_hostname']}}"
+    state: present
+    backup: yes
+  with_items: "{{groups['add-node']}}"
+- name: View file contents
+  raw: cat /etc/hosts
+  register: result
+- name: Print
+  debug: var=result.stdout_lines
+- name: Please note that
+  debug: msg="If you have executed playBook for many times, the file hosts will be appended for many times. You need to clean up manually. Here I will print out your current hosts for you"
+
+- name: Disable firewalld
+  systemd:
+    name: "{{item}}"
+    state: stopped
+    enabled: no
+  with_items:
+    - firewalld
+  ignore_errors: yes
+- name: Temporarily closed
+  raw: setenforce 0
+  ignore_errors: yes
+- debug: msg="If the above red error occurs, it is because you have set setenForce to 0, so ignore this error here, most of them are not turned off by default, thank you"
+- name: Permanent ban
+  lineinfile:
+    dest: /etc/selinux/config
+    regexp: "^SELINUX="
+    line: "SELINUX=disabled"
+
+
+- name: Temporarily close swap
+  raw: swapoff -a
+- name: backup swap
+  raw: yes | cp /etc/fstab /etc/fstab_bak
+- name: Permanently close swap
+  lineinfile:
+    dest: /etc/fstab
+    regexp: ".*swap"
+    line: ""
+
+- name: Configuration ipvs
+  template:
+    src: "roles/common/templates/{{item}}"
+    dest: "/etc/sysconfig/modules/{{item}}"
+    force: yes
+  with_items:
+    - ipvs.modules
+- name: Permission assignment
+  file: path=/etc/sysconfig/modules/ipvs.modules mode=0755
+- name: Open the IPVS module
+  shell: |
+    bash /etc/sysconfig/modules/ipvs.modules && \
+    lsmod | grep -e ip_vs -e nf_conntrack_ipv4
+  register: lsmod
+- debug: msg="{{ lsmod.stdout_lines |select('match','^(nf_de)') | list }}"
+
+- name: The kernel optimization
+  sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    sysctl_file: /etc/sysctl.conf
+    sysctl_set: yes
+    state: present
+    reload: yes
+  become: true
+  with_items:
+          - { name: 'kernel.pid_max', value: '196608'}
+          - { name: 'net.ipv4.ip_forward', value: '1' }
+          - { name: 'vm.max_map_count', value: '262144'}
+          - { name: 'net.ipv4.neigh.default.gc_thresh1', value: '8000'}
+          - { name: 'net.ipv4.neigh.default.gc_thresh2', value: '9000'}
+          - { name: 'net.ipv4.neigh.default.gc_thresh3', value: '10000'}
+          - { name: 'fs.inotify.max_user_watches', value: '1048576'} # 注册监听目录的数量限制
+          - { name: 'fs.inotify.max_user_instances', value: '8192'} # 初始化 ifd 的数量限制
+          - { name: 'net.core.somaxconn', value: '32768'} # 表示socket监听(listen)的backlog上限,
+          - { name: 'net.core.wmem_max', value: '26214400'} # 发送套接字缓冲区大小的最大值
+          - { name: 'net.core.rmem_max', value: '26214400'} # 接收套接字缓冲区大小的最大值
+          - { name: 'net.core.rmem_default', value: '26214400'} # 接收套接字缓冲区大小的默认值
+          - { name: 'net.ipv4.tcp_wmem', value: '4096 12582912 16777216'} # 每个socket链路发送窗口大小
+          - { name: 'net.ipv4.tcp_rmem', value: '4096 12582912 16777216'} # 每个socket链路接收窗口大小
+          - { name: 'net.ipv4.tcp_max_syn_backlog', value: '8096'} # 能接受SYN同步包的最大客户端数量，即半连接上限
+          - { name: 'net.ipv4.tcp_slow_start_after_idle', value: '0'} # 禁用慢启动
+          - { name: 'net.ipv4.tcp_tw_reuse', value: '1'} # 可以重复利用处于time_wait状态的连接,仅在TCP套接字作为客户端，调用connect时起作用
+          - { name: 'net.core.netdev_max_backlog', value: '16384'}  #在每个网络接口接收数据包的速率比内核处理这些包的速率快时，允许送到队列的数据包的最大数目。
+          - { name: 'fs.file-max', value: '2097152'}
+          - { name: 'net.ipv4.ip_forward', value: '1'}
+          - { name: 'fs.inotify.max_queued_events', value: '16384'} #inotify管理的队列的最大长度，文件系统变化越频繁，这个值就应该越大
+          - { name: 'net.ipv4.conf.default.promote_secondaries', value: '1'}
+  ignore_errors: yes
+- name: working file
+  file:
+    dest: /etc/sysctl.d/k8s.conf
+    state: touch
+    mode: 0777
+- name: Give weight to open the netFilter bridge connection
+  command: modprobe br_netfilter
+  ignore_errors: yes
+- name: k8s Kernel parameter optimization
+  sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    sysctl_file: /etc/sysctl.d/k8s.conf
+    sysctl_set: yes
+    state: present
+    reload: yes
+  become: yes
+  with_items:
+          - { name: 'net.bridge.bridge-nf-call-iptables', value: '1'}
+          - { name: 'net.bridge.bridge-nf-call-ip6tables', value: '1'}
+          - { name: 'net.ipv4.ip_nonlocal_bind', value: '1'}
+          - { name: 'net.ipv4.ip_forward', value: '1'}
+          - { name: 'vm.swappiness', value: '0'}
+  ignore_errors: yes
+- name: increase system OS limit nofile
+  pam_limits:
+    domain: '*'
+    limit_type: "{{ item }}"
+    limit_item: nofile
+    value: 65535
+  with_items:
+    - hard
+    - soft
+  ignore_errors: yes
+
+- name: add kubernetes repo
+  template: src={{ item.file }} dest={{ item.conf }}
+  with_items:
+  - { file: '/root/kubeaction/roles/kubernetes/templates/kubernetes.repo',conf: '/etc/yum.repos.d/kubernetes.repo' }
+
+- name: remove
+  stat:
+     path: ./buffer
+  register: files_to_delete
+- name: Remover buffer
+  file:
+    path: ./buffer
+    state: absent
+- debug:
+    msg: "This is where the kill mission will be performed"
+  when: files_to_delete.stat.exists and files_to_delete.stat.isdir
