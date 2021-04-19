@@ -1,0 +1,98 @@
+- name: cluster certs update
+  hosts: localhost
+  become: yes
+  become_user: root
+  connection: local
+  any_errors_fatal: true
+  gather_facts: no
+  tasks:
+    - debug:
+        msg:
+          - "**********************************************************************************"
+          - "====================== Cluster Certs Update ======================"
+          - "**********************************************************************************"
+    - name:
+      wait_for:
+        delay: 3
+        timeout: 0
+    - name: Gather system time
+      setup:
+        filter: ansible_date_time
+    - name: Set start time
+      set_fact:
+        time_start: "{{ ansible_date_time.epoch }}"
+    - debug: var=ansible_date_time.date
+    - debug: var=ansible_date_time.time
+
+- name: Cluster Certs Update
+  hosts: "{{ hosts | default('localhost:master') }}"
+  tags: certs
+  gather_facts: no
+  become: yes
+  become_user: root
+  any_errors_fatal: true
+  tasks:
+    - name: The current certificate is valid for
+      raw: kubeadm alpha certs check-expiration
+      register: check_expiration
+    - debug: var=check_expiration.stdout_lines
+    - name: Back up the cluster with /etc/kubernetes
+      file:
+        path: "{{item}}"
+        state: directory
+      with_items:
+        - /opt/renew
+        - /etc/kubernetes.bak
+        - /var/lib/etcd.bak
+    - name: copy
+      copy:
+        src: "{{item.src}}"
+        dest: "{{item.dest}}"
+        mode: "{{item.mode}}"
+      with_items:
+        - { src: '/etc/kubernetes/pki',dest: '/etc/kubernetes.bak', mode: '0777'}
+        - { src: '/var/lib/etcd',dest: '/var/lib/etcd.bak', mode: '0777'}
+      ignore_errors: yes
+    - name: Keep the original document
+      copy: 
+        src: "{{item}}"
+        dest: /etc/kubernetes.bak
+        mode: 0777
+      with_fileglob:
+        - /etc/kubernetes/*.conf
+
+- name: Cluster Certs Update
+  hosts: "{{ hosts | default('master') }}"
+  tags: certs_renew
+  gather_facts: no
+  tasks:
+    - name: alpha certs renew all
+      shell: |
+             kubeadm config view  > /opt/renew/kubeadm.yaml
+             kubeadm alpha certs renew all --config=/opt/renew/kubeadm.yaml
+    - name: Certificate update completed. View current certificate validity
+      command: kubeadm alpha certs check-expiration
+      register: renew_result
+    - debug: var=renew_result.stdout_lines
+    - name: Update the KubeconFIG file
+      raw: kubeadm init phase kubeconfig all --config /opt/renew/kubeadm.yaml
+    - name: Overwrite the existing ADMIN file
+      shell: |
+             mv $HOME/.kube/config $HOME/.kube/config.old
+             cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+             chown $(id -u):$(id -g) $HOME/.kube/config
+    - name: Restart all container
+      shell: |
+             docker restart `docker ps | grep etcd  | awk '{ print $1 }'`
+             docker restart `docker ps | grep kube-apiserver  | awk '{ print $1 }'`
+             docker restart `docker ps | grep kube-scheduler  | awk '{ print $1 }'`
+             docker restart `docker ps | grep kube-controller  | awk '{ print $1 }'`
+      ignore_errors: yes
+    - name: Restart kubelet
+      systemd:
+         state: restarted
+         name: kubelet.service
+    - name: Verify the validity of apiserver's certificate to verify that the update was successful
+      shell: echo | openssl s_client -showcerts -connect 127.0.0.1:6443 -servername api 2>/dev/null | openssl x509 -noout -enddate
+      register: verify
+    - debug: var=verify.stdout_lines
