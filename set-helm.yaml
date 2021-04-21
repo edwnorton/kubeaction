@@ -1,0 +1,38 @@
+- name: helm install
+  hosts: "{{ hosts | default('helm') }}"
+  tags: helm
+  gather_facts: no
+  become: yes
+  become_user: root
+  any_errors_fatal: true
+  #vars:
+  #  https_proxy: # default empty
+  #  http_proxy: # default empty
+  tasks:
+    - name: generate working directory
+      file:
+        dest: "{{item.dest}}"
+        state: directory
+      with_items:
+        - {dest: "/opt/helm"}
+        - {dest: "/data/charts"}
+    - debug:
+        msg: "{{ https_proxy }}"
+    - name: download helm
+      shell: source /etc/profile | curl https://get.helm.sh/helm-v3.5.4-linux-amd64.tar.gz -o /opt/helm/helm-v3.5.4-linux-amd64.tar.gz
+      environment:
+        https_proxy: "{{ http_proxy }}"
+    - name: Unzip the files
+      unarchive:
+        src: /opt/helm/helm-v3.5.4-linux-amd64.tar.gz
+        dest: /opt/helm
+    - name: move helm
+      command: mv /opt/helm/linux-amd64/helm /usr/local/bin/helm
+    - name: install helm push plugin
+      shell: /usr/local/bin/helm plugin install https://github.com/chartmuseum/helm-push.git
+      environment:
+        https_proxy: "{{ http_proxy }}"
+      ignore_errors: yes
+    - name: download chartmuseum
+      shell:
+        docker pull chartmuseum/chartmuseum:latest

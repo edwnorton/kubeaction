@@ -5,11 +5,15 @@
 
 [node]
 
+[helm]
+172.16.13.54
+
 
 [kubeaction]
 172.16.13.54
 172.16.13.60
 172.16.13.61
+172.16.13.71
 
 [vip]
 172.16.13.200
@@ -21,3 +25,8 @@
 test01.anyran.wyny
 
 [all:vars]
+http_proxy=http://172.16.8.243:7890
+
+[helm:vars]
+https_proxy=http://172.16.8.243:7890
+http_proxy=http://172.16.8.243:7890

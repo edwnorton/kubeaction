@@ -1,0 +1,30 @@
+- name: ingress-nginx install
+  hosts: "{{ hosts | default('kubeaction') }}"
+  tags: download-ingress
+  gather_facts: no
+  tasks:
+    - name: download ingress-nginx-images
+      shell: |
+            docker pull k8s.gcr.io/ingress-nginx/controller:v0.45.0
+            docker pull docker.io/jettech/kube-webhook-certgen:v1.5.1
+      ignore_errors: yes
+
+- name: working directory
+  hosts: "{{ hosts | default('master[0]') }}"
+  gather_facts: no
+  tags: install
+  tasks:
+    - name: generate working directory
+      file:
+        dest: "{{item.dest}}"
+        state: directory
+      with_items:
+        - {dest: "/opt/ingress"}
+
+    - name: initializing cluster config
+      template:
+         src: roles/ingress/templates/deploy.yaml
+         dest: /opt/ingress
+         force: yes
+    - name: Start the cluster
+      raw: kubectl apply -f /opt/ingress/deploy.yaml

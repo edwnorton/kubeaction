@@ -5,6 +5,35 @@
   roles:
     - { role: docker }
 
+- name: set docker proxy
+  hosts: "{{ hosts | default('kubeaction') }}"
+  gather_facts: no
+  become: yes
+  tags: docker-proxy
+  tasks:
+    - name: prepare conf
+      file:
+        dest: "{{item.dest}}"
+        state: directory
+      with_items:
+        - {dest: "/etc/systemd/system/docker.service.d"}
+    - name: set proxy environment
+      template:
+        src: "roles/common/templates/http-proxy.conf"
+        dest: "/etc/systemd/system/docker.service.d/http-proxy.conf"
+        force: yes
+    - name: modify proxy IP
+      lineinfile:
+        dest: /etc/systemd/system/docker.service.d/http-proxy.conf
+        state: present
+        regexp: '^Environment="HTTP_PROXY=http:\/\/127\.0\.0\.1:7890"'
+        line: 'Environment="HTTP_PROXY={{ http_proxy }}"'
+    - name: Restart the Docker configuration and set the boot up
+      systemd:
+        name: docker.service
+        daemon_reload: yes
+        state: restarted
+
 - name: k8s images
   hosts: "{{ hosts | default('kubeaction') }}"
   gather_facts: no
