@@ -1,0 +1,22 @@
+- name: install monitor
+  hosts: "{{ hosts | default('master[0]') }}"
+  tags: monitor
+  gather_facts: no
+  become: yes
+  become_user: root
+  any_errors_fatal: true
+  tasks:
+    - name: generate working directory
+      file:
+        dest: "{{item.dest}}"
+        state: directory
+      with_items:
+        - {dest: "/opt/monitor"}
+    - name: move monitor yaml
+      command: cp -r /root/kubeaction/roles/prometheus/files/manifests /opt/monitor/
+    - name: install prometheus-operator
+      shell: kubectl apply -f /opt/monitor/manifests/setup
+    - name: waitting install
+      shell: until kubectl get servicemonitors --all-namespaces ; do date; sleep 1; echo ""; done
+    - name: install prometheus
+      shell: kubectl apply -f /opt/monitor/manifests
