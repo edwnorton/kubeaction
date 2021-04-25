@@ -5,6 +5,10 @@ metadata:
   namespace:  {{ .Values.metadata.namespace }}
   labels:
     app: {{ .Values.metadata.label }}
+  annotations:
+    # prometheus.io/path: "/actuator/prometheus"
+    prometheus.io/port: "{{ .Values.monitor.port }}"
+    prometheus.io/scrape: "{{ .Values.monitor.scrape }}"
 spec:
   ports:
     - port: {{ .Values.service.port }}

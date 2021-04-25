@@ -52,6 +52,10 @@ service:
   host: tt.example.com
   nodePort: 18080
 
+monitor:
+  port: 10000
+  scrape: true
+
 ingress:
   enabled: false
   annotations: {}

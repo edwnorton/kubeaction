@@ -30,6 +30,9 @@ spec:
     fsGroup: 2000
     runAsNonRoot: true
     runAsUser: 1000
+  additionalScrapeConfigs:            ## 增加了这三行，声明了自定义的配置
+    name: additional-configs
+    key: prometheus-additional.yaml
   serviceAccountName: prometheus-k8s
   serviceMonitorNamespaceSelector: {}
   serviceMonitorSelector: {}

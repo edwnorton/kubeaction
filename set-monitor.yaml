@@ -20,3 +20,5 @@
       shell: until kubectl get servicemonitors --all-namespaces ; do date; sleep 1; echo ""; done
     - name: install prometheus
       shell: kubectl apply -f /opt/monitor/manifests
+    - name: additional-configs secret
+      shell: kubectl create secret generic additional-configs --from-file=/opt/monitor/manifests/config/prometheus-additional.yaml -n monitoring
