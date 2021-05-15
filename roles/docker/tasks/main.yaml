@@ -1,3 +1,6 @@
+- name: prepare docker repo
+  shell: yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+
 - name: prepare docker environment
   yum:
     name: "{{ item }}"
